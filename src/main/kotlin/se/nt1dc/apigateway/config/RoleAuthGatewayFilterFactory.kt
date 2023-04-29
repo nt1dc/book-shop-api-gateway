@@ -3,6 +3,8 @@ package se.nt1dc.apigateway.config
 import org.springframework.cloud.gateway.filter.GatewayFilter
 import org.springframework.cloud.gateway.filter.GatewayFilterChain
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory
+import org.springframework.core.io.buffer.DataBuffer
+import org.springframework.core.io.buffer.DataBufferUtils
 import org.springframework.stereotype.Component
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.bodyToMono
@@ -18,34 +20,37 @@ class RoleAuthGatewayFilterFactory :
         return GatewayFilter { exchange: ServerWebExchange, chain: GatewayFilterChain ->
             val request = exchange.request
             val response = exchange.response
-            WebClient.create("http://localhost:8084/token/validate")
-                .post()
-                .body(
-                    Mono.just(TokenValidationRequest(config.role)),
-                    TokenValidationRequest::class.java
-                )
-                .headers { headers ->
-                    headers.addAll(request.headers)
+            println(config.roles)
+            WebClient.create("http://localhost:8084/token/validate").post().body(
+                Mono.just(TokenValidationRequest(config.roles)), TokenValidationRequest::class.java
+            ).headers { headers ->
+                headers.addAll(request.headers)
+            }.exchangeToMono { clientResponse ->
+                if (clientResponse.statusCode().is2xxSuccessful) {
+                    print(exchange.request.headers)
+                    chain.filter(exchange)
+                } else {
+                    response.statusCode = clientResponse.statusCode()
+                    clientResponse.bodyToMono<DataBuffer>().flatMap { buffer ->
+                        response.writeWith(Mono.just(buffer)).doOnError {
+                            DataBufferUtils.release(buffer)
+                        }.doOnCancel {
+                            DataBufferUtils.release(buffer)
+                        }
+                    }.then(Mono.defer { response.setComplete() })
                 }
-                .exchangeToMono { clientResponse ->
-                    if (clientResponse.statusCode().is2xxSuccessful) {
-                        chain.filter(exchange)
-                    } else {
-                        response.statusCode = clientResponse.statusCode()
-                        response.setComplete()
-                    }
-                }
+            }
 
         }
     }
 
     data class Config(
-        var role: MutableList<String> = mutableListOf()
+        var roles: List<String> = listOf()
     )
 
     override fun shortcutFieldOrder(): List<String> {
         // we need this to use shortcuts in the application.yml
-        return listOf("role")
+        return listOf("roles")
     }
 
 

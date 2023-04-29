@@ -13,11 +13,14 @@ spring:
         - id: zxc
           uri: lb://BOOK-SERVICE
           predicates:
-            - Method=GET
-            - Path=/ping
+            - Method=POST
+            - Path=/order
           filters:
-            - RoleAuth=USER
-
+            - name: RoleAuth
+              args:
+                roles:
+                  - USER
+                  - ADMIN
 
 eureka:
   client:
