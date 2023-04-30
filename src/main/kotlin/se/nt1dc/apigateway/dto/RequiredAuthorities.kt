@@ -1,6 +1,6 @@
 package se.nt1dc.apigateway.dto
 
 
-data class TokenValidationRequest(
+data class RequiredAuthorities(
     var roles: List<String>
 )

@@ -10,7 +10,7 @@ import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.bodyToMono
 import org.springframework.web.server.ServerWebExchange
 import reactor.core.publisher.Mono
-import se.nt1dc.apigateway.dto.TokenValidationRequest
+import se.nt1dc.apigateway.dto.RequiredAuthorities
 
 
 @Component
@@ -24,7 +24,7 @@ class RoleAuthGatewayFilterFactory(
             val response = exchange.response
             webClient.build()
                 .post().uri("http://auth-service/token/validate").body(
-                    Mono.just(TokenValidationRequest(config.roles)), TokenValidationRequest::class.java
+                    Mono.just(RequiredAuthorities(config.roles)), RequiredAuthorities::class.java
                 ).headers { headers ->
                     headers.addAll(request.headers)
                 }.exchangeToMono { clientResponse ->
