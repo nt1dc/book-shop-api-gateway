@@ -1,8 +1,10 @@
 package se.nt1dc.apigateway.config
 
+import org.springframework.cloud.client.loadbalancer.LoadBalanced
 import org.springframework.cloud.gateway.filter.GatewayFilter
 import org.springframework.cloud.gateway.filter.GatewayFilterChain
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory
+import org.springframework.context.annotation.Bean
 import org.springframework.core.io.buffer.DataBuffer
 import org.springframework.core.io.buffer.DataBufferUtils
 import org.springframework.stereotype.Component
@@ -14,33 +16,39 @@ import se.nt1dc.apigateway.dto.TokenValidationRequest
 
 
 @Component
-class RoleAuthGatewayFilterFactory :
+class RoleAuthGatewayFilterFactory(
+    val webClient: WebClient.Builder
+) :
     AbstractGatewayFilterFactory<RoleAuthGatewayFilterFactory.Config>(Config::class.java) {
     override fun apply(config: Config): GatewayFilter {
         return GatewayFilter { exchange: ServerWebExchange, chain: GatewayFilterChain ->
             val request = exchange.request
             val response = exchange.response
-            println(config.roles)
-            WebClient.create("http://localhost:8084/token/validate").post().body(
-                Mono.just(TokenValidationRequest(config.roles)), TokenValidationRequest::class.java
-            ).headers { headers ->
-                headers.addAll(request.headers)
-            }.exchangeToMono { clientResponse ->
-                if (clientResponse.statusCode().is2xxSuccessful) {
-                    print(exchange.request.headers)
-                    chain.filter(exchange)
-                } else {
-                    response.statusCode = clientResponse.statusCode()
-                    clientResponse.bodyToMono<DataBuffer>().flatMap { buffer ->
-                        response.writeWith(Mono.just(buffer)).doOnError {
-                            DataBufferUtils.release(buffer)
-                        }.doOnCancel {
-                            DataBufferUtils.release(buffer)
-                        }
-                    }.then(Mono.defer { response.setComplete() })
+            webClient.build()
+                .post().uri("http://auth-service/token/validate").body(
+                    Mono.just(TokenValidationRequest(config.roles)), TokenValidationRequest::class.java
+                ).headers { headers ->
+                    headers.addAll(request.headers)
+                }.exchangeToMono { clientResponse ->
+                    if (clientResponse.statusCode().is2xxSuccessful) {
+                        val zxc = exchange.mutate().request(
+                            exchange.request.mutate()
+                                .header("login", clientResponse.headers().asHttpHeaders()["login"]!![0])
+                                .build()
+                        )
+                            .build()
+                        chain.filter(zxc)
+                    } else {
+                        response.statusCode = clientResponse.statusCode()
+                        clientResponse.bodyToMono<DataBuffer>().flatMap { buffer ->
+                            response.writeWith(Mono.just(buffer)).doOnError {
+                                DataBufferUtils.release(buffer)
+                            }.doOnCancel {
+                                DataBufferUtils.release(buffer)
+                            }
+                        }.then(Mono.defer { response.setComplete() })
+                    }
                 }
-            }
-
         }
     }
 
