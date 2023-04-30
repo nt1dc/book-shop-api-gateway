@@ -1,10 +1,8 @@
 package se.nt1dc.apigateway.config
 
-import org.springframework.cloud.client.loadbalancer.LoadBalanced
 import org.springframework.cloud.gateway.filter.GatewayFilter
 import org.springframework.cloud.gateway.filter.GatewayFilterChain
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory
-import org.springframework.context.annotation.Bean
 import org.springframework.core.io.buffer.DataBuffer
 import org.springframework.core.io.buffer.DataBufferUtils
 import org.springframework.stereotype.Component
@@ -31,13 +29,13 @@ class RoleAuthGatewayFilterFactory(
                     headers.addAll(request.headers)
                 }.exchangeToMono { clientResponse ->
                     if (clientResponse.statusCode().is2xxSuccessful) {
-                        val zxc = exchange.mutate().request(
+                        val modifiedExchange = exchange.mutate().request(
                             exchange.request.mutate()
                                 .header("login", clientResponse.headers().asHttpHeaders()["login"]!![0])
                                 .build()
                         )
                             .build()
-                        chain.filter(zxc)
+                        chain.filter(modifiedExchange)
                     } else {
                         response.statusCode = clientResponse.statusCode()
                         clientResponse.bodyToMono<DataBuffer>().flatMap { buffer ->
